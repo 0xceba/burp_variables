@@ -110,19 +110,72 @@ public class BurpVariablesTab extends JPanel {
           which saves the table to the PersistedObject any time a cell is modified
          */
         TableCellEditor customEditor = new DefaultCellEditor(new JTextField()) {
+            private int editingRow;
+            private int editingColumn;
+            private String oldKey;
+
+            // Override stopCellEditing to commit table changes to the persistence object
+            // after the user loses focuses on a cell they've been editing
             @Override
             public boolean stopCellEditing() {
-                // Invoke stopCellEditing of DefaultCellEditor
                 // True value means editing has stopped
                 boolean stopped = super.stopCellEditing();
 
-                // Save table after cell is done being modified
+                // Start save logic after cell is done being modified
                 if (stopped) {
-                    saveTable();
+                    // Variables to represent the new key:value pair that is being added
+                    String newKey = table.getValueAt(editingRow,0).toString();
+                    String newValue = table.getValueAt(editingRow,1).toString();
+
+                    // Logic to prevent duplicate keys
+                    if(editingColumn == 0) {
+                        // Loop through all table rows
+                        for (int i = 0; i < table.getRowCount(); i++) {
+                            // Assign a temporary key:value pair for the current row
+                            String keyValue = table.getValueAt(i, 0).toString();
+                            String valueValue = table.getValueAt(i, 1).toString();
+
+                            // Duplicate row condition: if a looping row has the same key
+                            // but different value as the new row
+                            if (keyValue != null && keyValue.equals(newKey) && !valueValue.equals(newValue)) {
+                                logging.raiseInfoEvent("Variable with name '" + newKey + "' already exists in table.");
+
+                                // Remove the new row from the table
+                                int selectedRow = table.convertRowIndexToModel(editingRow);
+                                tableModel.removeRow(selectedRow);
+
+                                // Remove the new row from the persistence object
+                                persistence.deleteString(oldKey);
+
+                                // Exit stopCellEditing()
+                                return stopped;
+                            }
+                        }
+                    }
+                    // Delete key:value pair from persistence object
+                    persistence.deleteString(oldKey);
+
+                    // Recreate key:value pair in persistence object
+                    persistence.setString(newKey,newValue);
                 }
 
                 return stopped;
             }
+
+            // Helper function to identify which row is being edited prior to stopCellEditing
+            @Override
+            public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
+                // Set private variables of the cell being edited
+                editingRow = row;
+                editingColumn = column;
+
+                // Set private variable of the key value before edit is complete
+                oldKey = table.getValueAt(editingRow,0).toString();
+
+                // Resume default behavior; return the component that is being edited
+                return super.getTableCellEditorComponent(table, value, isSelected, row, column);
+            }
+
         };
 
         // Add the custom TableCellEditor to both columns so all cells receive it
@@ -293,35 +346,6 @@ public class BurpVariablesTab extends JPanel {
 
             // Remove row from table
             tableModel.removeRow(modelRow);
-        }
-    }
-
-    /**
-     * Method to save the table to the persisted data.
-     */
-    private void saveTable(){
-        // Deletes all previously set keys
-        deleteKeys();
-
-        // Loop through table rows
-        for (int i = 0; i < table.getRowCount(); i++){
-            String rowKey = table.getValueAt(i,0).toString();
-            String rowValue = table.getValueAt(i,1).toString();
-
-            // Prevent adding empty keys or rows
-            if(!rowKey.isEmpty() && !rowValue.isEmpty()) {
-                persistence.setString(rowKey, rowValue);
-            }
-        }
-    }
-
-    /**
-     * Method to delete all persisted keys.
-     */
-    private void deleteKeys(){
-        // Iterate through & delete the keys in the persisted data
-        for (String key : persistence.stringKeys()){
-            persistence.deleteString(key);
         }
     }
 

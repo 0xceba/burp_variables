@@ -39,11 +39,12 @@ public class BurpVariablesHTTPHandler implements HttpHandler{
 
         // Check if the tool type is enabled by checking that the tool's persistence boolean value == true
         if(
-            persistence.getBoolean(requestToBeSent.toolSource().toolType().toolName()) &&
-            containsVariable(requestAsString)
+            persistence.getBoolean(requestToBeSent.toolSource().toolType().toolName())
+                    && containsVariable(requestAsString)
         ){
             // Do not match and replace if request from proxy is not in scope
-            if((requestToBeSent.toolSource().toolType().toolName().equals("Proxy")) && !requestToBeSent.isInScope()){
+            if((requestToBeSent.toolSource().toolType().toolName().equals("Proxy"))
+                    && !requestToBeSent.isInScope()){
                 return RequestToBeSentAction.continueWith(requestToBeSent);
             }
 

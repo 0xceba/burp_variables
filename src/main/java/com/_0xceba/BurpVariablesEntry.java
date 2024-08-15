@@ -17,22 +17,28 @@ public class BurpVariablesEntry implements BurpExtension {
      */
     @Override
     public void initialize(MontoyaApi api) {
-        // Set extension name. Must be the first action
         api.extension().setName("Burp Variables");
 
         // Initialize logging and persistence instances
         Logging logging = api.logging();
         PersistedObject persist =  api.persistence().extensionData();
 
-        // Create the UI tab and add it Burp
-        api.userInterface().registerSuiteTab("Variables", new BurpVariablesTab(logging, persist));
+        // Register the GUI tab, add it to the Burp Frame
+        BurpVariablesTab variablesTab = new BurpVariablesTab(logging, persist);
+        api.userInterface().registerSuiteTab("Variables", variablesTab);
+        api.userInterface().swingUtils().suiteFrame().add(variablesTab);
 
-        // Create the HTTP handler to intercept requests
+        // Register the HTTP handler to intercept requests
         api.http().registerHttpHandler(new BurpVariablesHTTPHandler(logging, persist));
 
         // Log load output
         api.logging().logToOutput("Burp Variables v" +
                 getClass().getPackage().getImplementationVersion() +
                 " loaded successfully.");
+
+        // Register the unload handler
+        api.extension().registerUnloadingHandler(() -> {
+            api.logging().logToOutput("Burp Variables unloaded successfully.");
+        });
     }
 }

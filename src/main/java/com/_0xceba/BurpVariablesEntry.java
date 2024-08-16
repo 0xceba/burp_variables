@@ -24,9 +24,7 @@ public class BurpVariablesEntry implements BurpExtension {
         PersistedObject persist =  api.persistence().extensionData();
 
         // Register the GUI tab, add it to the Burp Frame
-        BurpVariablesTab variablesTab = new BurpVariablesTab(logging, persist);
-        api.userInterface().registerSuiteTab("Variables", variablesTab);
-        api.userInterface().swingUtils().suiteFrame().add(variablesTab);
+        api.userInterface().registerSuiteTab("Variables", new BurpVariablesTab(logging, persist, api));
 
         // Register the HTTP handler to intercept requests
         api.http().registerHttpHandler(new BurpVariablesHTTPHandler(logging, persist));

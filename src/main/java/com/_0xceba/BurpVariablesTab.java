@@ -8,6 +8,7 @@ import javax.swing.table.*;
 import javax.swing.border.*;
 import java.awt.*;
 import java.awt.event.*;
+import burp.api.montoya.MontoyaApi;
 
 /**
  * Provides the extension's UI elements.
@@ -19,6 +20,7 @@ public class BurpVariablesTab extends JPanel {
     PersistedObject persistence;
     JTable table;
     DefaultTableModel tableModel;
+    MontoyaApi api;
 
     // Constant 2d array holding enum class ToolType values and label values
     final String[][] mapToolNameAndToolLabel = {
@@ -35,10 +37,11 @@ public class BurpVariablesTab extends JPanel {
      * @param logging logging interface from {@link burp.api.montoya.MontoyaApi}
      * @param persistence persistence object from {@link burp.api.montoya.MontoyaApi}
      */
-    public BurpVariablesTab(Logging logging, PersistedObject persistence) {
-        // Set the instance's logging and persistence variables
+    public BurpVariablesTab(Logging logging, PersistedObject persistence, MontoyaApi api) {
+        // Set instance variables
         this.logging = logging;
         this.persistence = persistence;
+        this.api = api;
 
         // Set the panel's layout to BoxLayout aligned along Y-axis
         this.setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
@@ -292,8 +295,8 @@ public class BurpVariablesTab extends JPanel {
         // Disable focusable on panel components to prevent them from consuming ESC key events
         setAllComponentsNotFocusable(settingsPanel);
 
-        // Create settingsDialog and add settingsPanel contents
-        JDialog settingsDialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Variables Settings", true);
+        // Create settingsDialog attached to Burp Frame and add settingsPanel contents
+        JDialog settingsDialog = new JDialog(api.userInterface().swingUtils().suiteFrame(), "Variables Settings", true);
         settingsDialog.setContentPane(settingsPanel);
 
         // Allow user to close the settingsDialog window

@@ -1,14 +1,16 @@
 package com._0xceba;
 
 import burp.api.montoya.logging.Logging;
-import burp.api.montoya.persistence.PersistedObject;
-import javax.swing.*;
-import javax.swing.border.EmptyBorder;
-import javax.swing.table.*;
-import javax.swing.border.*;
-import java.awt.*;
-import java.awt.event.*;
 import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.persistence.PersistedObject;
+import java.awt.*;
+import java.awt.event.ItemEvent;
+import java.awt.event.ItemListener;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import javax.swing.*;
+import javax.swing.border.*;
+import javax.swing.table.*;
 
 /**
  * Provides the extension's UI elements.

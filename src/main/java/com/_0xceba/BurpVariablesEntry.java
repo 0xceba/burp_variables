@@ -1,8 +1,8 @@
 package com._0xceba;
 
 import burp.api.montoya.BurpExtension;
-import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.logging.Logging;
+import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.persistence.PersistedObject;
 
 /**

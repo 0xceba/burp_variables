@@ -8,45 +8,49 @@ import burp.api.montoya.http.handler.ResponseReceivedAction;
 import burp.api.montoya.http.HttpService;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.logging.Logging;
-import burp.api.montoya.persistence.PersistedObject;
+
+import java.util.HashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * HTTP handler to intercept HTTP requests.
+ * HTTP handler to intercept and modify HTTP requests within Burp.
  */
 public class BurpVariablesHTTPHandler implements HttpHandler{
-    Logging logging;
-    PersistedObject persistence;
+    private final HashMap<String, Boolean> toolsEnabledMap;
+    private final HashMap<String, String> variablesMap;
+    private final Logging logging;
 
     /**
-     * Constructs the handler.
+     * Constructs a new instance of BurpVariablesHTTPHandler.
      *
-     * @param logging logging interface from {@link burp.api.montoya.MontoyaApi}
-     * @param persistence persistence object from {@link burp.api.montoya.MontoyaApi}
+     * @param logging         the logging interface from the Montoya API
+     * @param variablesMap    HashMap containing variable names and their corresponding values
+     * @param toolsEnabledMap HashMap indicating which tools are enabled or disabled
      */
-    public BurpVariablesHTTPHandler(Logging logging, PersistedObject persistence) {
+    public BurpVariablesHTTPHandler(Logging logging, HashMap<String, String> variablesMap, HashMap<String, Boolean> toolsEnabledMap) {
         this.logging = logging;
-        this.persistence = persistence;
+        this.variablesMap = variablesMap;
+        this.toolsEnabledMap = toolsEnabledMap;
     }
 
     /**
-     * Type RequestToBeSentAction for requests before they are sent from Burp.
+     * Handles HTTP requests before they are sent from Burp.
      *
-     * @param requestToBeSent HTTP request before it is sent from burp.
-     * @return The modified HTTP request or null if unmodified.
+     * @param requestToBeSent HTTP request before it is sent from Burp Suite.
+     * @return Modified HTTP request if variables are replaced, otherwise the original request.
      */
     @Override
     public RequestToBeSentAction handleHttpRequestToBeSent(HttpRequestToBeSent requestToBeSent) {
-        // Convert the request into a new string
+        // Convert the request to a string
         String requestAsString = requestToBeSent.toString();
 
-        // Check if the tool type is enabled by checking that the tool's persistence boolean value == true
+        // Check if the tool type is enabled and the request contains variables
         if(
-            persistence.getBoolean(requestToBeSent.toolSource().toolType().toolName())
-                    && containsVariable(requestAsString)
+            toolsEnabledMap.get(requestToBeSent.toolSource().toolType().toolName())
+                && containsVariable(requestAsString)
         ){
-            // Do not match and replace if request from proxy is not in scope
+            // Continue without modification if the request is from the Proxy tool and not in scope
             if((requestToBeSent.toolSource().toolType().toolName().equals("Proxy"))
                     && !requestToBeSent.isInScope()){
                 return RequestToBeSentAction.continueWith(requestToBeSent);
@@ -55,25 +59,25 @@ public class BurpVariablesHTTPHandler implements HttpHandler{
             // Replace the variables in a string copy of the request
             requestAsString = replaceVariables(requestAsString);
 
-            // Create an object of type HttpService for the modified request
+            // Create an HttpService instance for the modified request
             HttpService requestService = requestToBeSent.httpService();
 
-            // Create a new HTTP request
+            // Create a new HTTP request with the modified string
             HttpRequest modifiedRequest = HttpRequest.httpRequest(requestService, requestAsString);
 
-            // Update Content-Length header for requests that have a body
+            // Update Content-Length header for requests with a body
             if (modifiedRequest.body().length() > 0)
                 modifiedRequest = modifiedRequest.withBody((modifiedRequest.bodyToString()));
 
-            // Send the new HTTP request
+            // Continue with the modified request
             return RequestToBeSentAction.continueWith(modifiedRequest);
         }
-        // Request is unmodified
+        // Continue with the original request
         return RequestToBeSentAction.continueWith(requestToBeSent);
     }
 
     /**
-     * Type handleHttpResponseReceived for responses before they are received by Burp.
+     * Handles HTTP responses before they are received by Burp.
      * Unused; responses are not modified.
      *
      * @param responseReceived HTTP response before it is received by Burp.
@@ -85,31 +89,36 @@ public class BurpVariablesHTTPHandler implements HttpHandler{
     }
 
     /**
-     * Method to check if the request contains variable indicator characters.
+     * Checks if the HTTP request contains variable indicator characters.
      *
      * @param passedRequestAsString HTTP request converted to a string.
-     * @return True boolean if the request contains variable indicator characters. False if not found.
+     * @return True if the request contains variable indicator characters, false otherwise.
      */
     private boolean containsVariable(String passedRequestAsString){
-        // Regex to match variable names that include alphanumeric and special characters
-        Pattern pattern = Pattern.compile("\\(\\([a-zA-Z0-9!@#$%^&*_+=`:;'<>,.\" -]+\\)\\)");
+        // Regex to match variable names enclosed in double parentheses
+        Pattern pattern = Pattern.compile("\\(\\(.+\\)\\)");
         Matcher matcher = pattern.matcher(passedRequestAsString);
 
-        // Return true/false if matcher finds a match or not
+        // Return true if a match is found, otherwise false
         return matcher.find();
     }
 
     /**
-     * Method to replace each instance of variables found in the request.
-     * Variables are identified as ((KEY)).
+     * Replaces each instance of variables found in the HTTP request.
+     * Variables are referenced in the format ((key)).
      *
      * @param passedRequestAsString HTTP request converted to a string.
-     * @return Modified HTTP request with variable replacement.
+     * @return Modified HTTP request with variables replaced.
      */
     private String replaceVariables(String passedRequestAsString){
-        for (String key : persistence.stringKeys()) {
-            // Replaces each key in place (with prepended/appended parenthesis) with the key's value
-            passedRequestAsString = passedRequestAsString.replaceAll("\\(\\(" + key + "\\)\\)",persistence.getString(key));
+        // Iterate through the storage object
+        for (HashMap.Entry<String, String> entry : variablesMap.entrySet()) {
+            // Don't replace if the key is empty
+            if(!entry.getKey().isEmpty()) {
+                // Replace the variable references in the HTTP request
+                // Pattern.quote is used to escape special characters in the key string
+                passedRequestAsString = passedRequestAsString.replaceAll(Pattern.quote("((" + entry.getKey() + "))"), entry.getValue());
+            }
         }
         return passedRequestAsString;
     }

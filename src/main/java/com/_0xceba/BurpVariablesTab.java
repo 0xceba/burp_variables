@@ -497,14 +497,14 @@ public class BurpVariablesTab extends JPanel {
     private void importCSV(){
         // Create a file chooser
         JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Import CSV file");
+        fileChooser.setDialogTitle("Import variables from a CSV file");
 
         // Set a file filter to show only .csv files
         FileNameExtensionFilter filter = new FileNameExtensionFilter("CSV files", "csv");
         fileChooser.setFileFilter(filter);
 
-        // Open a save dialog window and wait for the user to select a file or cancel
-        int userSelection = fileChooser.showSaveDialog(null);
+        // Open an open dialog window and wait for the user to select a file or cancel
+        int userSelection = fileChooser.showOpenDialog(null);
 
         // If the user selected a file to save
         if (userSelection == JFileChooser.APPROVE_OPTION) {

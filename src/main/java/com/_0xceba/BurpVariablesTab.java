@@ -3,11 +3,14 @@ package com._0xceba;
 import burp.api.montoya.logging.Logging;
 import burp.api.montoya.MontoyaApi;
 
+import burp.api.montoya.ui.Theme;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVWriter;
 import com.opencsv.exceptions.CsvValidationException;
 
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
 import java.awt.event.KeyAdapter;
@@ -29,12 +32,13 @@ import javax.swing.table.*;
  * It also contains logic to handle variable persistence and user interactions.
  */
 public class BurpVariablesTab extends JPanel {
-    private final DefaultTableModel tableModel;
-    private final HashMap<String, Boolean> toolsEnabledMap;
-    private final HashMap<String, String> variablesMap;
-    private final JTable table;
-    private final Logging logging;
-    private final MontoyaApi api;
+    private DefaultTableModel variablesTableModel;
+    private Frame burpFrame;
+    private HashMap<String, Boolean> toolsEnabledMap;
+    private HashMap<String, String> variablesMap;
+    private JTable variablesTable;
+    private Logging burpLogging;
+    private MontoyaApi montoyaApi;
 
     // Constant 2D array holding enum class ToolType values and corresponding label values
     final String[][] mapToolNameAndToolLabel = {
@@ -48,15 +52,16 @@ public class BurpVariablesTab extends JPanel {
     /**
      * Constructs a BurpVariablesTab with the specified parameters.
      *
-     * @param api            the Montoya API interface
-     * @param logging        the logging interface from the Montoya API
-     * @param variablesMap   HashMap storing variable names and values
-     * @param toolsEnabledMap HashMap storing tool names and their enabled status
+     * @param montoyaApi        The Montoya API interface.
+     * @param burpLogging       The logging interface from the Montoya API.
+     * @param variablesMap      HashMap storing variable names and values.
+     * @param toolsEnabledMap   HashMap storing tool names and their enabled status.
      */
-    public BurpVariablesTab(Logging logging, MontoyaApi api, HashMap<String, String> variablesMap, HashMap<String, Boolean> toolsEnabledMap) {
-        this.logging = logging;
-        this.api = api;
+    public BurpVariablesTab(MontoyaApi montoyaApi, Logging burpLogging, HashMap<String, String> variablesMap, HashMap<String, Boolean> toolsEnabledMap) {
+        this.burpLogging = burpLogging;
+        this.montoyaApi = montoyaApi;
         this.variablesMap = variablesMap;
+        this.burpFrame = montoyaApi.userInterface().swingUtils().suiteFrame();
         this.toolsEnabledMap = toolsEnabledMap;
 
         // Set the panel's layout to BoxLayout aligned along the Y-axis
@@ -72,20 +77,19 @@ public class BurpVariablesTab extends JPanel {
 
         // Create the table model with column names
         DefaultTableModel tableModel = new DefaultTableModel(null, columnNames);
-        this.tableModel = tableModel;
+        this.variablesTableModel = tableModel;
 
         // Instantiate and configure the JTable
         JTable table = setupTable(tableModel);
-        this.table = table;
+        this.variablesTable = table;
 
         // Add table to a JScrollPane for scrolling
         JScrollPane scrollPane = new JScrollPane(table);
         this.add(scrollPane);
 
-        // Instantiate and configure an additional JPanel for buttons
-        // Required to horizontally sort buttons
-        JPanel buttonPane = setupButtonPane();
-        this.add(buttonPane);
+        // Instantiate and configure the footer panel
+        JPanel footerPanel = setupFooterPanel();
+        this.add(footerPanel);
 
         // For new projects, set the default tool enabled selections
         if(toolsEnabledMap.isEmpty())
@@ -95,29 +99,26 @@ public class BurpVariablesTab extends JPanel {
     /**
      * Generates and configures the JTable and its properties.
      *
-     * @param newTableModel the TableModel interface used to store JTable data
-     * @return the prepared JTable object
+     * @param tableModel    The TableModel interface used to store JTable data.
+     * @return The prepared JTable object.
      */
-    private JTable setupTable(DefaultTableModel newTableModel) {
-        JTable newTable = new JTable(newTableModel);
+    private JTable setupTable(DefaultTableModel tableModel) {
+        JTable variablesTable = new JTable(tableModel);
 
         // Disable reordering of headers
-        newTable.getTableHeader().setReorderingAllowed(false);
+        variablesTable.getTableHeader().setReorderingAllowed(false);
 
         // Set single selection mode for removing row functionality
-        newTable.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
-
-        // Enable cell selection mode
-        newTable.setCellSelectionEnabled(true);
+        variablesTable.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
 
         // Allow sorting by column headers
-        newTable.setAutoCreateRowSorter(true);
+        variablesTable.setAutoCreateRowSorter(true);
 
         // Set default sort to "Variable Name" column
-        newTable.getRowSorter().toggleSortOrder(0);
+        variablesTable.getRowSorter().toggleSortOrder(0);
 
         // Commit cell changes on focus loss
-        newTable.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
+        variablesTable.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
 
         // Fill the table with persisted data
         populateTable();
@@ -133,7 +134,7 @@ public class BurpVariablesTab extends JPanel {
              * This method is called when the user finishes editing a cell in the JTable.
              * It ensures that the changes are persisted and handles duplicate key prevention.
              *
-             * @return true if editing has stopped, false otherwise
+             * @return  True if editing has stopped, false otherwise.
              */
             @Override
             public boolean stopCellEditing() {
@@ -143,18 +144,22 @@ public class BurpVariablesTab extends JPanel {
                 // Logic block to save the new cell contents to the variables map
                 if (stopped) {
                     // String variables which represent the new key:value pair that is being added
-                    String newKey = table.getValueAt(editingRow,0).toString();
-                    String newValue = table.getValueAt(editingRow,1).toString();
+                    String newKey = BurpVariablesTab.this.variablesTable.getValueAt(editingRow, 0).toString();
+                    String newValue = BurpVariablesTab.this.variablesTable.getValueAt(editingRow, 1).toString();
 
-                    // Check for key duplicates
-                    if(editingColumn == 0
-                            && variablesMap.containsKey(newKey)
-                            && !newKey.equals(oldKey)){
-                        logging.raiseInfoEvent("Variable with name '" + newKey + "' already exists.");
+                    // Start key validation if user is modifying a key
+                     if(editingColumn == 0
+                            // Check if the new key is empty
+                            && newKey.isEmpty()
+                            // Check if the new key already exists in a different row
+                            || (variablesMap.containsKey(newKey)
+                                // Disregard cases when user is modifying the same key row
+                                && !newKey.equals(oldKey))){
+                         burpLogging.raiseInfoEvent("Unable to save modified variable because the variable name is empty or already exists.");
 
                         // Remove the new duplicate key row from the table
-                        int selectedRow = table.convertRowIndexToModel(editingRow);
-                        tableModel.removeRow(selectedRow);
+                        int selectedRow = BurpVariablesTab.this.variablesTable.convertRowIndexToModel(editingRow);
+                        variablesTableModel.removeRow(selectedRow);
 
                         // Remove the new duplicate key row from the variables map
                         variablesMap.remove(oldKey);
@@ -166,9 +171,8 @@ public class BurpVariablesTab extends JPanel {
                     // Remove the outdated key:value pair from the variables map
                     variablesMap.remove(oldKey);
 
-                    // If the key is not empty, then add the new pair to the variables map
-                    if(!newKey.isEmpty())
-                        variablesMap.put(newKey, newValue);
+                    // Add the new pair to the variables map
+                    variablesMap.put(newKey, newValue);
                 }
                 return stopped;
             }
@@ -176,12 +180,12 @@ public class BurpVariablesTab extends JPanel {
             /**
              * Identifies which row is being edited prior to stopping cell editing.
              *
-             * @param table     the JTable that is being edited
-             * @param value     the value to be edited
-             * @param isSelected whether the cell is selected
-             * @param row       the row index of the cell
-             * @param column    the column index of the cell
-             * @return the component that is being edited
+             * @param table         The JTable that is being edited.
+             * @param value         The value to be edited.
+             * @param isSelected    Whether the cell is selected.
+             * @param row           The row index of the cell.
+             * @param column        The column index of the cell.
+             * @return  The component that is being edited.
              */
             @Override
             public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
@@ -190,7 +194,7 @@ public class BurpVariablesTab extends JPanel {
                 editingColumn = column;
 
                 // Store the key value before the edit is finished
-                oldKey = table.getValueAt(editingRow,0).toString();
+                oldKey = table.getValueAt(editingRow, 0).toString();
 
                 // Resume default behavior; return the component that is being edited
                 return super.getTableCellEditorComponent(table, value, isSelected, row, column);
@@ -198,57 +202,161 @@ public class BurpVariablesTab extends JPanel {
         };
 
         // Add the custom TableCellEditor to both columns so all cells receive it
-        newTable.getColumnModel().getColumn(0).setCellEditor(customEditor);
-        newTable.getColumnModel().getColumn(1).setCellEditor(customEditor);
+        variablesTable.getColumnModel().getColumn(0).setCellEditor(customEditor);
+        variablesTable.getColumnModel().getColumn(1).setCellEditor(customEditor);
 
-        return newTable;
+        return variablesTable;
     }
 
     /**
-     * Generates and configures the button panel and its properties.
+     * Sets up a footer panel for the user interface, containing
+     * nested panels for adding variables and delete/options buttons.
      *
-     * @return the prepared JPanel object
+     * @return The footer JPanel object.
      */
-    private JPanel setupButtonPane() {
-        JPanel newButtonPane = new JPanel();
+    private JPanel setupFooterPanel() {
+        // Create footer JPanel with GridLayout for horizontal components
+        JPanel footerPanel = new JPanel(new GridLayout(1, 2, 10, 0));
 
-        // Add row button and listener
-        JButton addRowButton = new JButton("Add row");
-        addRowButton.addActionListener(e ->
-        {
-            addRowAndSelect();
-        });
-        newButtonPane.add(addRowButton);
+        // Set footer panel size to maximum width by 150 height to display add variables panel cleanly
+        footerPanel.setPreferredSize(new Dimension(Integer.MAX_VALUE, 150));
+        footerPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE,150));
 
-        // Options button and listener
-        JButton optionsButton = new JButton("Options");
-        optionsButton.addActionListener(e ->
-        {
-            displayOptions();
-        });
-        newButtonPane.add(optionsButton);
+        // Create add variables panel with GridBagLayout so components can stretch across grids
+        JPanel addVariablesPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        // Add panel to the footer panel
+        footerPanel.add(addVariablesPanel);
+
+        // Outer border to pad components
+        Border footerPanelsOuterPaddingBorder = BorderFactory.createEmptyBorder(5, 0, 0, 0);
+        // Visible border that uses the application's JTable border color codes for visual continuity
+        Border addVariablesPanelVisibleBorder = montoyaApi.userInterface().currentTheme().equals(Theme.LIGHT)
+                ? BorderFactory.createLineBorder(new Color(182, 182, 182), 1)
+                : BorderFactory.createLineBorder(new Color(96, 96, 96), 1);
+        // Inner border to pad components
+        Border addVariablesPanelInnerPaddingBorder = BorderFactory.createEmptyBorder(0, 5, 0, 5);
+        // Create a compound border by combining padding and visible borders
+        Border innerCompound = new CompoundBorder(addVariablesPanelVisibleBorder, addVariablesPanelInnerPaddingBorder);
+        Border fullBorder = new CompoundBorder(footerPanelsOuterPaddingBorder, innerCompound);
+        // Apply the full border to the addVariablesPanel
+        addVariablesPanel.setBorder(fullBorder);
+
+        // Set the horizontal stretching behavior to allow components to stretch horizontally
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        // Set padding insets around components
+        gbc.insets = new Insets(5, 5, 5, 5);
+
+        // Set component position to 0,0
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        // Add centered label to the panel at specified grid position
+        addVariablesPanel.add(new JLabel("Variable name", SwingConstants.CENTER), gbc);
+
+        // Set component position to 1,0
+        gbc.gridx = 1;
+        // Add centered label to the panel at specified grid position
+        addVariablesPanel.add(new JLabel("Variable value", SwingConstants.CENTER), gbc);
+
+        // Allow component to expand horizontally
+        gbc.weightx = 1.0;
+        // Set component position to 0,1
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        // Create variable name text field
+        JTextField variableNameField = new JTextField();
+        // Set a fixed width for the text field
+        variableNameField.setColumns(32);
+        // Add text field to the panel at the specified grid position
+        addVariablesPanel.add(variableNameField, gbc);
+
+        // Set component position to 1,1
+        gbc.gridx = 1;
+        gbc.gridy = 1;
+        // Create variable value text field
+        JTextField variableValueField = new JTextField();
+        // Set a fixed width for the text field
+        variableValueField.setColumns(32);
+        // Add text field to the panel at the specified grid position
+        addVariablesPanel.add(variableValueField, gbc);
+
+        // Add variables button
+        JButton addVariableButton = new JButton("Add variable");
+        // Disallow component from expanding horizontally
+        gbc.fill = GridBagConstraints.NONE;
+        // Set component to span one column only
+        gbc.gridwidth = 0;
+        // Set component position to 0,2
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        // Add button to the panel at the specified grid position
+        addVariablesPanel.add(addVariableButton, gbc);
+
+        // Create an ActionListener for adding a variable when an add event occurs (click or "enter" key)
+        ActionListener addVariableListener = new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                // Call addVariable and clear both text fields if the variable is added successfully
+                if(addVariable(variableNameField.getText(), variableValueField.getText())) {
+                    variableNameField.setText("");
+                    variableValueField.setText("");
+                    // Move focus to the variable name field for the next input
+                    variableNameField.requestFocusInWindow();
+                }
+            }
+        };
+        // Add the action listener to the text fields, so it is triggered by the "enter" key
+        variableNameField.addActionListener(addVariableListener);
+        variableValueField.addActionListener(addVariableListener);
+        // Add the action listener to the add variables button
+        addVariableButton.addActionListener(addVariableListener);
+
+        // Create buttons panel
+        JPanel buttonsPanel = new JPanel();
+        // Add panel to the footer panel
+        footerPanel.add(buttonsPanel);
+        // Apply padding border to buttons panel
+        buttonsPanel.setBorder(footerPanelsOuterPaddingBorder);
 
         // Delete row button and listener
-        JButton deleteRowButton = new JButton("Delete row");
+        JButton deleteRowButton = new JButton("Delete selected variable");
         deleteRowButton.addActionListener(e ->
         {
             deleteRow();
         });
-        newButtonPane.add(deleteRowButton);
+        buttonsPanel.add(deleteRowButton);
 
-        return newButtonPane;
+        // Options button and listener
+        JButton optionsButton = new JButton("⚙ Options");
+        optionsButton.addActionListener(e ->
+        {
+            displayOptions();
+        });
+        buttonsPanel.add(optionsButton);
+
+        return footerPanel;
     }
 
     /**
-     * Adds an empty row to the table and selects it.
+     * Adds a new variable to the table and the variables map if valid.
+     * Validates that the variable key is not empty and does not already exist in the map.
+     *
+     * @param variableKey   Variable name key.
+     * @param variableValue Variable value
+     * @return  True if the variable is added successfully, false otherwise.
      */
-    private void addRowAndSelect()
+    private boolean addVariable(String variableKey, String variableValue)
     {
-        tableModel.addRow(new Object[]{"", "",});
-
-        // Select the newly inserted row after it is added
-        int lastRow = table.convertRowIndexToView(tableModel.getRowCount() - 1);
-        table.changeSelection(lastRow, 0, false, false);
+        // Check if the variable key is not empty and does not already exist in the variables map
+        if(!variableKey.isEmpty() && !variablesMap.containsKey(variableKey)) {
+            // Add a new row to the variables table with the variable's key and value
+            variablesTableModel.addRow(new Object[]{variableKey, variableValue});
+            // Update the variables map with the new key:value pair
+            variablesMap.put(variableKey, variableValue);
+            return true;
+        }
+        burpLogging.raiseInfoEvent("Unable to add variable because the variable name is empty or already exists.");
+        return false;
     }
 
     /**
@@ -256,6 +364,9 @@ public class BurpVariablesTab extends JPanel {
      */
     private void displayOptions()
     {
+        // Vertical spacing constant of 10 pixels
+        final Dimension VERTICAL_SPACING = new Dimension(0, 10);
+
         // Create options JPanel with BoxLayout for only vertical components
         JPanel optionsPanel = new JPanel();
         optionsPanel.setLayout(new BoxLayout(optionsPanel, BoxLayout.Y_AXIS));
@@ -265,7 +376,7 @@ public class BurpVariablesTab extends JPanel {
         optionsPanel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(Color.DARK_GRAY), paddingBorder));
 
         // Create optionsDialog attached to Burp Frame and add optionsPanel contents
-        JDialog optionsDialog = new JDialog(api.userInterface().swingUtils().suiteFrame(), "Burp Variables Options", true);
+        JDialog optionsDialog = new JDialog(burpFrame, "Burp variables options", false);
         optionsDialog.setContentPane(optionsPanel);
 
         // Permits users to close the optionsDialog window
@@ -283,17 +394,17 @@ public class BurpVariablesTab extends JPanel {
 
         // Tool toggle option h1 label
         JLabel toolToggleTitle = new JLabel("Toggle tools");
-        toolToggleTitle.setFont(toolToggleTitle.getFont().deriveFont(Font.BOLD, 13f));
+        toolToggleTitle.setFont(toolToggleTitle.getFont().deriveFont(Font.BOLD));
         optionsPanel.add(toolToggleTitle);
 
         // Add vertical spacing
-        optionsPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
 
         // Tool toggle option body label
         optionsPanel.add(new JLabel("Select which tools should match and replace variable references."));
 
         // Add vertical spacing
-        optionsPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
 
         // Define an ItemListener to apply to all components of the options panel; prevents components from taking focus
         ItemListener preventFocusChangeItemListener = new ItemListener() {
@@ -323,79 +434,82 @@ public class BurpVariablesTab extends JPanel {
         }
 
         // Option separator
-        optionsPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
         optionsPanel.add(new JSeparator());
-        optionsPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
 
         // Import option h1 label
         JLabel importTitle = new JLabel("Import variables");
-        importTitle.setFont(importTitle.getFont().deriveFont(Font.BOLD, 13f));
+        importTitle.setFont(importTitle.getFont().deriveFont(Font.BOLD));
         optionsPanel.add(importTitle);
 
-        // Vertical spacing
-        optionsPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        // Add vertical spacing
+        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
 
         // Import option body labels
         optionsPanel.add(new JLabel("Import variable key:value pairs from a CSV file. The CSV file should"));
         optionsPanel.add(new JLabel("be formatted without a header row. The imported pairs will be"));
         optionsPanel.add(new JLabel("appended to the variables table."));
 
-        // Vertical spacing
-        optionsPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        // Add vertical spacing
+        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
 
         // Import option button and listener
         JButton importButton = new JButton("Import variables");
         importButton.addActionListener(e ->
         {
             importCSV();
+            // Return focus to the options dialog
+            optionsDialog.toFront();
         });
         optionsPanel.add(importButton);
 
         // Option separator
-        optionsPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
         optionsPanel.add(new JSeparator());
-        optionsPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
 
         // Export option h1 label
         JLabel exportTitle = new JLabel("Export variables");
-        exportTitle.setFont(exportTitle.getFont().deriveFont(Font.BOLD, 13f));
+        exportTitle.setFont(exportTitle.getFont().deriveFont(Font.BOLD));
         optionsPanel.add(exportTitle);
 
-        // Vertical spacing
-        optionsPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        // Add vertical spacing
+        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
 
         // Export option body label
         optionsPanel.add(new JLabel("Export the current variables table to a CSV file."));
 
-        // Vertical spacing
-        optionsPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        // Add vertical spacing
+        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
 
         // Export option button and listener
         JButton exportButton = new JButton("Export variables");
         exportButton.addActionListener(e ->
         {
+            // Return focus to the options dialog
             exportCSV();
         });
         optionsPanel.add(exportButton);
 
         // Option separator
-        optionsPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
         optionsPanel.add(new JSeparator());
-        optionsPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
 
         // Clear option h1 label
         JLabel clearTitle = new JLabel("Clear variables");
-        clearTitle.setFont(clearTitle.getFont().deriveFont(Font.BOLD, 13f));
+        clearTitle.setFont(clearTitle.getFont().deriveFont(Font.BOLD));
         optionsPanel.add(clearTitle);
 
-        // Vertical spacing
-        optionsPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        // Add vertical spacing
+        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
 
         // Import option body labels
         optionsPanel.add(new JLabel("Remove all entries from the variables table."));
 
-        // Vertical spacing
-        optionsPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        // Add vertical spacing
+        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
 
         // Clear option button and listener
         JButton clearButton = new JButton("Clear variables");
@@ -422,7 +536,7 @@ public class BurpVariablesTab extends JPanel {
      * Disables focusable property on all components of the given container.
      * Note: This method does not recursively disable nested container components.
      *
-     * @param container the container whose components should have their focusable property disabled
+     * @param container The container whose components should have their focusable property disabled.
      */
     private static void setAllComponentsNotFocusable(Container container) {
         Component[] components = container.getComponents();
@@ -437,16 +551,16 @@ public class BurpVariablesTab extends JPanel {
      */
     private void deleteRow()
     {
-        int selectedRow = table.getSelectedRow();
+        int selectedRow = variablesTable.getSelectedRow();
         if (selectedRow != -1) {
             // Get row index via convertRowIndexToModel to delete from a sorted table
-            int modelRow = table.convertRowIndexToModel(selectedRow);
+            int modelRow = variablesTable.convertRowIndexToModel(selectedRow);
 
             // Remove row from the variables map
-            variablesMap.remove(tableModel.getValueAt(modelRow, 0).toString());
+            variablesMap.remove(variablesTableModel.getValueAt(modelRow, 0).toString());
 
             // Remove row from table
-            tableModel.removeRow(modelRow);
+            variablesTableModel.removeRow(modelRow);
         }
     }
 
@@ -458,15 +572,15 @@ public class BurpVariablesTab extends JPanel {
         // Iterate through the variables map
         for (HashMap.Entry<String, String> entry : variablesMap.entrySet()) {
             // Add a row for each key:value pair from the variables map
-            tableModel.addRow(new Object[]{entry.getKey(), entry.getValue()});
+            variablesTableModel.addRow(new Object[]{entry.getKey(), entry.getValue()});
         }
     }
 
     /**
      * Derives the Tool Type enum value from the checkbox label.
      *
-     * @param toolTitle the label of the tool checkbox
-     * @return the corresponding Tool Type enum value, or null if not found
+     * @param toolTitle The label of the tool checkbox.
+     * @return  The corresponding Tool Type enum value, or null if not found.
      */
     private String lookupToolTypeEnum(String toolTitle){
         // Loops through first element of each inner array
@@ -504,7 +618,7 @@ public class BurpVariablesTab extends JPanel {
         fileChooser.setFileFilter(filter);
 
         // Open an open dialog window and wait for the user to select a file or cancel
-        int userSelection = fileChooser.showOpenDialog(null);
+        int userSelection = fileChooser.showOpenDialog(burpFrame);
 
         // If the user selected a file to save
         if (userSelection == JFileChooser.APPROVE_OPTION) {
@@ -514,15 +628,11 @@ public class BurpVariablesTab extends JPanel {
                 String[] line;
                 // Iterate through the CSV file
                 while ((line = reader.readNext()) != null) {
-                    // Check for duplicate keys
-                    if(!variablesMap.containsKey(line[0])) {
-                        // Add the first 2 fields of each line to the table model and the variables map
-                        tableModel.addRow(new Object[]{line[0], line[1],});
-                        variablesMap.put(line[0], line[1]);
-                    }
+                    // Validate and create a new variable with the first 2 fields of each line
+                    addVariable(line[0], line[1]);
                 }
             } catch (IOException | CsvValidationException e) {
-                logging.raiseErrorEvent(e.toString());
+                burpLogging.raiseErrorEvent(e.toString());
             }
         }
     }
@@ -538,7 +648,7 @@ public class BurpVariablesTab extends JPanel {
         fileChooser.setDialogTitle("Export variables to a CSV file");
 
         // Open a save dialog window and wait for the user to select a file or cancel
-        int userSelection = fileChooser.showSaveDialog(null);
+        int userSelection = fileChooser.showSaveDialog(burpFrame);
 
         // If the user selected a file to save
         if (userSelection == JFileChooser.APPROVE_OPTION) {
@@ -547,7 +657,8 @@ public class BurpVariablesTab extends JPanel {
 
             // Check if user is overwriting an existing file
             if (fileToExport.exists()) {
-                int response = JOptionPane.showConfirmDialog(null,
+                int response = JOptionPane.showConfirmDialog(
+                        burpFrame,
                         "The file already exists. Do you want to replace it?",
                         "Confirm overwrite", JOptionPane.YES_NO_OPTION,
                         JOptionPane.WARNING_MESSAGE);
@@ -570,7 +681,7 @@ public class BurpVariablesTab extends JPanel {
      * Writes the variables stored in the variables map to a specified file in CSV format.
      * This method uses a try-with-resources statement to ensure the CSVWriter is closed automatically.
      *
-     * @param fileToExport the file to which the variables will be exported
+     * @param fileToExport  The file to which the variables will be exported.
      */
     private void writeFile(File fileToExport){
         // Initialize a CSVWriter object in a try-with-resource statement
@@ -580,7 +691,7 @@ public class BurpVariablesTab extends JPanel {
                 writer.writeNext(new String[]{entry.getKey(), entry.getValue()});
             }
         } catch (IOException e) {
-            logging.raiseErrorEvent(e.toString());
+            burpLogging.raiseErrorEvent(e.toString());
         }
     }
 
@@ -589,18 +700,21 @@ public class BurpVariablesTab extends JPanel {
      */
     private void clearVariables(){
         // Confirm that the user wants to clear the variables table
-        int response = JOptionPane.showConfirmDialog(null,
+        int response = JOptionPane.showConfirmDialog(
+                burpFrame,
                 "Are you sure you want to remove all entries from the variables table? " +
                         "This operation is destructive and non-reversible.",
-                "Confirm clear variables", JOptionPane.YES_NO_OPTION,
+                "Confirm clear variables",
+                JOptionPane.YES_NO_OPTION,
                 JOptionPane.WARNING_MESSAGE);
+
         // User has confirmed that they want to clear the table
         if (response == JOptionPane.YES_OPTION) {
             // Clear all entries in the variables map
             variablesMap.clear();
 
             // Remove all rows from the table model
-            tableModel.setRowCount(0);
+            variablesTableModel.setRowCount(0);
         }
     }
 }

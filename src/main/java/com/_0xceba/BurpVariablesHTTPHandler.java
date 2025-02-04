@@ -17,19 +17,19 @@ import java.util.regex.Pattern;
  * HTTP handler to intercept and modify HTTP requests within Burp.
  */
 public class BurpVariablesHTTPHandler implements HttpHandler{
-    private final HashMap<String, Boolean> toolsEnabledMap;
-    private final HashMap<String, String> variablesMap;
-    private final Logging logging;
+    private HashMap<String, Boolean> toolsEnabledMap;
+    private HashMap<String, String> variablesMap;
+    private Logging burpLogging;
 
     /**
      * Constructs a new instance of BurpVariablesHTTPHandler.
      *
-     * @param logging         the logging interface from the Montoya API
-     * @param variablesMap    HashMap containing variable names and their corresponding values
-     * @param toolsEnabledMap HashMap indicating which tools are enabled or disabled
+     * @param burpLogging     The logging interface from the Montoya API.
+     * @param variablesMap    HashMap containing variable names and their corresponding values.
+     * @param toolsEnabledMap HashMap indicating which tools are enabled or disabled.
      */
-    public BurpVariablesHTTPHandler(Logging logging, HashMap<String, String> variablesMap, HashMap<String, Boolean> toolsEnabledMap) {
-        this.logging = logging;
+    public BurpVariablesHTTPHandler(Logging burpLogging, HashMap<String, String> variablesMap, HashMap<String, Boolean> toolsEnabledMap) {
+        this.burpLogging = burpLogging;
         this.variablesMap = variablesMap;
         this.toolsEnabledMap = toolsEnabledMap;
     }
@@ -37,8 +37,8 @@ public class BurpVariablesHTTPHandler implements HttpHandler{
     /**
      * Handles HTTP requests before they are sent from Burp.
      *
-     * @param requestToBeSent HTTP request before it is sent from Burp Suite.
-     * @return Modified HTTP request if variables are replaced, otherwise the original request.
+     * @param requestToBeSent   HTTP request before it is sent from Burp Suite.
+     * @return  Modified HTTP request if variables are replaced, otherwise the original request.
      */
     @Override
     public RequestToBeSentAction handleHttpRequestToBeSent(HttpRequestToBeSent requestToBeSent) {
@@ -80,8 +80,8 @@ public class BurpVariablesHTTPHandler implements HttpHandler{
      * Handles HTTP responses before they are received by Burp.
      * Unused; responses are not modified.
      *
-     * @param responseReceived HTTP response before it is received by Burp.
-     * @return The unmodified HTTP response.
+     * @param responseReceived  HTTP response before it is received by Burp.
+     * @return  The unmodified HTTP response.
      */
     @Override
     public ResponseReceivedAction handleHttpResponseReceived(HttpResponseReceived responseReceived) {
@@ -92,7 +92,7 @@ public class BurpVariablesHTTPHandler implements HttpHandler{
      * Checks if the HTTP request contains variable indicator characters.
      *
      * @param passedRequestAsString HTTP request converted to a string.
-     * @return True if the request contains variable indicator characters, false otherwise.
+     * @return  True if the request contains variable indicator characters, false otherwise.
      */
     private boolean containsVariable(String passedRequestAsString){
         // Regex to match variable names enclosed in double parentheses
@@ -108,7 +108,7 @@ public class BurpVariablesHTTPHandler implements HttpHandler{
      * Variables are referenced in the format ((key)).
      *
      * @param passedRequestAsString HTTP request converted to a string.
-     * @return Modified HTTP request with variables replaced.
+     * @return  Modified HTTP request with variables replaced.
      */
     private String replaceVariables(String passedRequestAsString){
         // Iterate through the storage object

@@ -157,15 +157,9 @@ public class BurpVariablesTab extends JPanel {
                                 && !newKey.equals(oldKey))){
                          burpLogging.raiseInfoEvent("Unable to save modified variable because the variable name is empty or already exists.");
 
-                        // Remove the new duplicate key row from the table
-                        int selectedRow = BurpVariablesTab.this.variablesTable.convertRowIndexToModel(editingRow);
-                        variablesTableModel.removeRow(selectedRow);
-
-                        // Remove the new duplicate key row from the variables map
-                        variablesMap.remove(oldKey);
-
-                        // Exit stopCellEditing()
-                        return stopped;
+                         // Revert key change back to unique value
+                         variablesTable.setValueAt(oldKey, editingRow, 0);
+                         return false;
                     }
 
                     // Remove the outdated key:value pair from the variables map
@@ -373,10 +367,13 @@ public class BurpVariablesTab extends JPanel {
 
         // Compound border for border and padding
         Border paddingBorder = BorderFactory.createEmptyBorder(10, 10, 10, 10);
-        optionsPanel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(Color.DARK_GRAY), paddingBorder));
+        Border optionsPanelVisibleTopBorder = montoyaApi.userInterface().currentTheme().equals(Theme.LIGHT)
+                ? BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(112, 112, 112))
+                : BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(68, 69, 70));
+        optionsPanel.setBorder(BorderFactory.createCompoundBorder(optionsPanelVisibleTopBorder, paddingBorder));
 
         // Create optionsDialog attached to Burp Frame and add optionsPanel contents
-        JDialog optionsDialog = new JDialog(burpFrame, "Burp variables options", false);
+        JDialog optionsDialog = new JDialog(burpFrame, "Burp Variables options", false);
         optionsDialog.setContentPane(optionsPanel);
 
         // Permits users to close the optionsDialog window
@@ -438,6 +435,34 @@ public class BurpVariablesTab extends JPanel {
         optionsPanel.add(new JSeparator());
         optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
 
+        // Export option h1 label
+        JLabel exportTitle = new JLabel("Export variables");
+        exportTitle.setFont(exportTitle.getFont().deriveFont(Font.BOLD));
+        optionsPanel.add(exportTitle);
+
+        // Add vertical spacing
+        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
+
+        // Export option body label
+        optionsPanel.add(new JLabel("Export the current variables table to a CSV file."));
+
+        // Add vertical spacing
+        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
+
+        // Export option button and listener
+        JButton exportButton = new JButton("Export variables");
+        exportButton.addActionListener(e ->
+        {
+            // Return focus to the options dialog
+            exportCSV();
+        });
+        optionsPanel.add(exportButton);
+
+        // Option separator
+        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
+        optionsPanel.add(new JSeparator());
+        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
+
         // Import option h1 label
         JLabel importTitle = new JLabel("Import variables");
         importTitle.setFont(importTitle.getFont().deriveFont(Font.BOLD));
@@ -463,34 +488,6 @@ public class BurpVariablesTab extends JPanel {
             optionsDialog.toFront();
         });
         optionsPanel.add(importButton);
-
-        // Option separator
-        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
-        optionsPanel.add(new JSeparator());
-        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
-
-        // Export option h1 label
-        JLabel exportTitle = new JLabel("Export variables");
-        exportTitle.setFont(exportTitle.getFont().deriveFont(Font.BOLD));
-        optionsPanel.add(exportTitle);
-
-        // Add vertical spacing
-        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
-
-        // Export option body label
-        optionsPanel.add(new JLabel("Export the current variables table to a CSV file."));
-
-        // Add vertical spacing
-        optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));
-
-        // Export option button and listener
-        JButton exportButton = new JButton("Export variables");
-        exportButton.addActionListener(e ->
-        {
-            // Return focus to the options dialog
-            exportCSV();
-        });
-        optionsPanel.add(exportButton);
 
         // Option separator
         optionsPanel.add(Box.createRigidArea(VERTICAL_SPACING));

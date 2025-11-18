@@ -19,7 +19,9 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
 import javax.swing.*;
 import javax.swing.border.*;
@@ -72,7 +74,8 @@ public class BurpVariablesTab extends JPanel {
 
         String[] columnNames = {
                 "Variable name",
-                "Variable value"
+                "Variable value",
+                "Variable lookup (Regex)"
         };
 
         // Create the table model with column names
@@ -146,6 +149,7 @@ public class BurpVariablesTab extends JPanel {
                     // String variables which represent the new key:value pair that is being added
                     String newKey = BurpVariablesTab.this.variablesTable.getValueAt(editingRow, 0).toString();
                     String newValue = BurpVariablesTab.this.variablesTable.getValueAt(editingRow, 1).toString();
+                    String newLookup = BurpVariablesTab.this.variablesTable.getValueAt(editingRow, 2).toString();
 
                     // Start key validation if user is modifying a key
                      if(editingColumn == 0
@@ -166,7 +170,10 @@ public class BurpVariablesTab extends JPanel {
                     variablesMap.remove(oldKey);
 
                     // Add the new pair to the variables map
-                    variablesMap.put(newKey, newValue);
+                    List<String> values = new ArrayList<>();
+                    values.add(newValue);
+                    values.add(newLookup);
+                    variablesMap.put(newKey, String.join(",", values));
                 }
                 return stopped;
             }
@@ -198,6 +205,7 @@ public class BurpVariablesTab extends JPanel {
         // Add the custom TableCellEditor to both columns so all cells receive it
         variablesTable.getColumnModel().getColumn(0).setCellEditor(customEditor);
         variablesTable.getColumnModel().getColumn(1).setCellEditor(customEditor);
+        variablesTable.getColumnModel().getColumn(2).setCellEditor(customEditor);
 
         return variablesTable;
     }
@@ -252,6 +260,11 @@ public class BurpVariablesTab extends JPanel {
         // Add centered label to the panel at specified grid position
         addVariablesPanel.add(new JLabel("Variable value", SwingConstants.CENTER), gbc);
 
+        // Set component position to 2,0
+        gbc.gridx = 2;
+        // Add centered label to the panel at specified grid position
+        addVariablesPanel.add(new JLabel("Variable lookup (regex)", SwingConstants.CENTER), gbc);
+
         // Allow component to expand horizontally
         gbc.weightx = 1.0;
         // Set component position to 0,1
@@ -274,6 +287,16 @@ public class BurpVariablesTab extends JPanel {
         // Add text field to the panel at the specified grid position
         addVariablesPanel.add(variableValueField, gbc);
 
+        // Set component position to 2,1
+        gbc.gridx = 2;
+        gbc.gridy = 1;
+        // Create variable value text field
+        JTextField variableLookupField = new JTextField();
+        // Set a fixed width for the text field
+        variableLookupField.setColumns(32);
+        // Add text field to the panel at the specified grid position
+        addVariablesPanel.add(variableLookupField, gbc);
+
         // Add variables button
         JButton addVariableButton = new JButton("Add variable");
         // Disallow component from expanding horizontally
@@ -291,9 +314,10 @@ public class BurpVariablesTab extends JPanel {
             @Override
             public void actionPerformed(ActionEvent e) {
                 // Call addVariable and clear both text fields if the variable is added successfully
-                if(addVariable(variableNameField.getText(), variableValueField.getText())) {
+                if(addVariable(variableNameField.getText(), variableValueField.getText(), variableLookupField.getText())) {
                     variableNameField.setText("");
                     variableValueField.setText("");
+                    variableLookupField.setText("");
                     // Move focus to the variable name field for the next input
                     variableNameField.requestFocusInWindow();
                 }
@@ -302,6 +326,7 @@ public class BurpVariablesTab extends JPanel {
         // Add the action listener to the text fields, so it is triggered by the "enter" key
         variableNameField.addActionListener(addVariableListener);
         variableValueField.addActionListener(addVariableListener);
+        variableLookupField.addActionListener(addVariableListener);
         // Add the action listener to the add variables button
         addVariableButton.addActionListener(addVariableListener);
 
@@ -339,14 +364,17 @@ public class BurpVariablesTab extends JPanel {
      * @param variableValue Variable value
      * @return  True if the variable is added successfully, false otherwise.
      */
-    private boolean addVariable(String variableKey, String variableValue)
+    private boolean addVariable(String variableKey, String variableValue, String variableLookUp) 
     {
         // Check if the variable key is not empty and does not already exist in the variables map
         if(!variableKey.isEmpty() && !variablesMap.containsKey(variableKey)) {
             // Add a new row to the variables table with the variable's key and value
-            variablesTableModel.addRow(new Object[]{variableKey, variableValue});
+            variablesTableModel.addRow(new Object[]{variableKey, variableValue, variableLookUp});
             // Update the variables map with the new key:value pair
-            variablesMap.put(variableKey, variableValue);
+            List<String> values = new ArrayList<>();
+            values.add(variableValue);
+            values.add(variableLookUp);
+            variablesMap.put(variableKey, String.join(",", values));
             return true;
         }
         burpLogging.raiseInfoEvent("Unable to add variable because the variable name is empty or already exists.");
@@ -569,7 +597,10 @@ public class BurpVariablesTab extends JPanel {
         // Iterate through the variables map
         for (HashMap.Entry<String, String> entry : variablesMap.entrySet()) {
             // Add a row for each key:value pair from the variables map
-            variablesTableModel.addRow(new Object[]{entry.getKey(), entry.getValue()});
+            String[] values = entry.getValue().split(",", 2);
+            String value = values.length > 0 ? values[0] : "";
+            String lookup = values.length > 1 ? values[1] : "";
+            variablesTableModel.addRow(new Object[]{entry.getKey(), value, lookup});
         }
     }
 
@@ -626,7 +657,7 @@ public class BurpVariablesTab extends JPanel {
                 // Iterate through the CSV file
                 while ((line = reader.readNext()) != null) {
                     // Validate and create a new variable with the first 2 fields of each line
-                    addVariable(line[0], line[1]);
+                    addVariable(line[0], line[1], line[2]);
                 }
             } catch (IOException | CsvValidationException e) {
                 burpLogging.raiseErrorEvent(e.toString());

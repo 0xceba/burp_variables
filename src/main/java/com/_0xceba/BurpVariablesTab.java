@@ -345,6 +345,15 @@ public class BurpVariablesTab extends JPanel {
         });
         buttonsPanel.add(deleteRowButton);
 
+        // Refresh row button and listener
+        JButton refreshRowButton = new JButton("Refresh variables table");
+        refreshRowButton.addActionListener(e ->
+        {
+            variablesTableModel.setRowCount(0);
+            populateTable();
+        });
+        buttonsPanel.add(refreshRowButton);
+
         // Options button and listener
         JButton optionsButton = new JButton("⚙ Options");
         optionsButton.addActionListener(e ->

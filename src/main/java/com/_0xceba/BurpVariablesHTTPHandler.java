@@ -78,13 +78,19 @@ public class BurpVariablesHTTPHandler implements HttpHandler{
 
     /**
      * Handles HTTP responses before they are received by Burp.
-     * Unused; responses are not modified.
+     * Responses are not modified but are used to update the variable values based on the given lookup.
      *
      * @param responseReceived  HTTP response before it is received by Burp.
      * @return  The unmodified HTTP response.
      */
     @Override
     public ResponseReceivedAction handleHttpResponseReceived(HttpResponseReceived responseReceived) {
+        // Convert the response to a string
+        String responseAsString = responseReceived.toString();
+
+        // Update the value of each variable using response. 
+        refreshValuesUsingLookup(responseAsString);
+
         return ResponseReceivedAction.continueWith(responseReceived);
     }
 
@@ -117,9 +123,39 @@ public class BurpVariablesHTTPHandler implements HttpHandler{
             if(!entry.getKey().isEmpty()) {
                 // Replace the variable references in the HTTP request
                 // Pattern.quote is used to escape special characters in the key string
-                passedRequestAsString = passedRequestAsString.replaceAll(Pattern.quote("((" + entry.getKey() + "))"), entry.getValue());
+                String[] values = entry.getValue().split(",", 2);
+                passedRequestAsString = passedRequestAsString.replaceAll(Pattern.quote("((" + entry.getKey() + "))"), values[0]);
             }
         }
         return passedRequestAsString;
+    }
+
+    /**
+     * Updates the value of each variable based on the given lookup, using the response data.
+     * Values are replaced according to matched value of the given lookup.
+     *
+     * @param receivedResponseAsString HTTP response converted to a string.
+     * @return HTTP response.
+     */
+    private String refreshValuesUsingLookup(String receivedResponseAsString) {
+        // Iterate through the storage object
+        for (HashMap.Entry<String, String> entry : variablesMap.entrySet()) {
+            // Don't update if the key is empty
+            if (!entry.getKey().isEmpty()) {
+                String[] values = entry.getValue().split(",", 2);
+                String lookup = values.length > 1 ? values[1] : "";
+                Pattern pattern = Pattern.compile(lookup, Pattern.MULTILINE);
+                if (pattern != null) {
+                    // Get new value from response based on the given lookup
+                    Matcher matcher = pattern.matcher(receivedResponseAsString);
+                    if (matcher.find()) {
+                        // Update the value of the variable
+                        values[0] = matcher.group(1).trim();
+                        variablesMap.put(entry.getKey(), String.join(",", values));
+                    }
+                }
+            }
+        }
+        return receivedResponseAsString;
     }
 }

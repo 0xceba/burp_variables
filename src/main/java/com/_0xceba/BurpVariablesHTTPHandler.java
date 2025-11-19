@@ -140,20 +140,33 @@ public class BurpVariablesHTTPHandler implements HttpHandler{
     private String refreshValuesUsingLookup(String receivedResponseAsString) {
         // Iterate through the storage object
         for (HashMap.Entry<String, String> entry : variablesMap.entrySet()) {
+            String key = entry.getKey();
+            String value = entry.getValue();
+
             // Don't update if the key is empty
-            if (!entry.getKey().isEmpty()) {
-                String[] values = entry.getValue().split(",", 2);
-                String lookup = values.length > 1 ? values[1] : "";
-                Pattern pattern = Pattern.compile(lookup, Pattern.MULTILINE);
-                if (pattern != null) {
-                    // Get new value from response based on the given lookup
-                    Matcher matcher = pattern.matcher(receivedResponseAsString);
-                    if (matcher.find()) {
-                        // Update the value of the variable
-                        values[0] = matcher.group(1).trim();
-                        variablesMap.put(entry.getKey(), String.join(",", values));
-                    }
-                }
+            if (key.isEmpty()) {
+                continue;
+            }
+
+            // Don't update if there's no lookup
+            String[] values = value.split(",", 2);
+            if (values.length < 2) {
+                continue;
+            }
+
+            // Don't update if lookup is empty
+            String lookup = values[1].trim();
+            if (lookup.isEmpty()) {
+                continue;
+            }
+
+            // Get new value from response based on the given lookup
+            Pattern pattern = Pattern.compile(lookup, Pattern.MULTILINE);
+            Matcher matcher = pattern.matcher(receivedResponseAsString);
+            if (matcher.find()) {
+                // Update the variable value
+                values[0] = matcher.group(1).trim();
+                variablesMap.put(entry.getKey(), String.join(",", values));
             }
         }
         return receivedResponseAsString;

@@ -5,7 +5,10 @@ import burp.api.montoya.MontoyaApi;
 
 import burp.api.montoya.ui.Theme;
 import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
 import com.opencsv.CSVWriter;
+import com.opencsv.RFC4180Parser;
+import com.opencsv.RFC4180ParserBuilder;
 import com.opencsv.exceptions.CsvValidationException;
 
 import java.awt.*;
@@ -661,11 +664,12 @@ public class BurpVariablesTab extends JPanel {
         if (userSelection == JFileChooser.APPROVE_OPTION) {
             File fileToImport = fileChooser.getSelectedFile();
             // Initialize a CSVReader object in a try-with-resource statement
-            try (CSVReader reader = new CSVReader(new FileReader(fileToImport))) {
+            RFC4180Parser rfc4180Parser = new RFC4180ParserBuilder().build();
+            try (CSVReader reader = new CSVReaderBuilder(new FileReader(fileToImport)).withCSVParser(rfc4180Parser).build()) {
                 String[] line;
                 // Iterate through the CSV file
                 while ((line = reader.readNext()) != null) {
-                    // Validate and create a new variable with the first 2 fields of each line
+                    // Validate and create a new variable with the first 3 fields of each line
                     addVariable(line[0], line[1], line[2]);
                 }
             } catch (IOException | CsvValidationException e) {

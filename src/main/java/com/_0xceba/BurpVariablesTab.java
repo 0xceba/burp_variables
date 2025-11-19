@@ -725,7 +725,10 @@ public class BurpVariablesTab extends JPanel {
         try (CSVWriter writer = new CSVWriter(new FileWriter(fileToExport))) {
             // Iterate through the variables map and write the fields to the CSVWriter
             for (HashMap.Entry<String, String> entry : variablesMap.entrySet()) {
-                writer.writeNext(new String[]{entry.getKey(), entry.getValue()});
+                String[] values = entry.getValue().split(",", 2);
+                String value = values.length > 0 ? values[0] : "";
+                String lookup = values.length > 1 ? values[1] : "";
+                writer.writeNext(new String[]{entry.getKey(), value, lookup});
             }
         } catch (IOException e) {
             burpLogging.raiseErrorEvent(e.toString());

@@ -75,7 +75,7 @@ public class BurpVariablesTab extends JPanel {
         String[] columnNames = {
                 "Variable name",
                 "Variable value",
-                "Variable lookup (Regex)"
+                "Response regex lookup"
         };
 
         // Create the table model with column names
@@ -263,7 +263,7 @@ public class BurpVariablesTab extends JPanel {
         // Set component position to 2,0
         gbc.gridx = 2;
         // Add centered label to the panel at specified grid position
-        addVariablesPanel.add(new JLabel("Variable lookup (regex)", SwingConstants.CENTER), gbc);
+        addVariablesPanel.add(new JLabel("Response regex lookup", SwingConstants.CENTER), gbc);
 
         // Allow component to expand horizontally
         gbc.weightx = 1.0;
@@ -272,8 +272,8 @@ public class BurpVariablesTab extends JPanel {
         gbc.gridy = 1;
         // Create variable name text field
         JTextField variableNameField = new JTextField();
-        // Set a fixed width for the text field
-        variableNameField.setColumns(32);
+        // Set a fixed width for the text field by setting the preferred size
+        variableNameField.setPreferredSize(new Dimension(150, variableNameField.getPreferredSize().height));
         // Add text field to the panel at the specified grid position
         addVariablesPanel.add(variableNameField, gbc);
 
@@ -282,8 +282,8 @@ public class BurpVariablesTab extends JPanel {
         gbc.gridy = 1;
         // Create variable value text field
         JTextField variableValueField = new JTextField();
-        // Set a fixed width for the text field
-        variableValueField.setColumns(32);
+        // Set a fixed width for the text field by setting the preferred size
+        variableValueField.setPreferredSize(new Dimension(150, variableNameField.getPreferredSize().height));
         // Add text field to the panel at the specified grid position
         addVariablesPanel.add(variableValueField, gbc);
 
@@ -292,8 +292,8 @@ public class BurpVariablesTab extends JPanel {
         gbc.gridy = 1;
         // Create variable value text field
         JTextField variableLookupField = new JTextField();
-        // Set a fixed width for the text field
-        variableLookupField.setColumns(32);
+        // Set a fixed width for the text field by setting the preferred size
+        variableLookupField.setPreferredSize(new Dimension(150, variableNameField.getPreferredSize().height));
         // Add text field to the panel at the specified grid position
         addVariablesPanel.add(variableLookupField, gbc);
 

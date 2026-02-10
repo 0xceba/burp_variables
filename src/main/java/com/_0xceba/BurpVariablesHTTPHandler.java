@@ -12,26 +12,31 @@ import burp.api.montoya.logging.Logging;
 import java.util.HashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 /**
  * HTTP handler to intercept and modify HTTP requests within Burp.
  */
 public class BurpVariablesHTTPHandler implements HttpHandler{
-    private HashMap<String, Boolean> toolsEnabledMap;
-    private HashMap<String, String> variablesMap;
-    private Logging burpLogging;
+    private final HashMap<String, Boolean> toolsEnabledMap;
+    private final HashMap<String, VariableData> variablesMap;
+    private final Logging burpLogging;
+    private final BurpVariablesTab variablesTab;
+    private static final Pattern VARIABLE_PATTERN = Pattern.compile("\\(\\(.+?\\)\\)");
 
     /**
      * Constructs a new instance of BurpVariablesHTTPHandler.
      *
      * @param burpLogging     The logging interface from the Montoya API.
-     * @param variablesMap    HashMap containing variable names and their corresponding values.
+     * @param variablesMap    HashMap containing variable names and their corresponding VariableData.
      * @param toolsEnabledMap HashMap indicating which tools are enabled or disabled.
+     * @param variablesTab    The UI tab for updating table display when variables change.
      */
-    public BurpVariablesHTTPHandler(Logging burpLogging, HashMap<String, String> variablesMap, HashMap<String, Boolean> toolsEnabledMap) {
+    public BurpVariablesHTTPHandler(Logging burpLogging, HashMap<String, VariableData> variablesMap, HashMap<String, Boolean> toolsEnabledMap, BurpVariablesTab variablesTab) {
         this.burpLogging = burpLogging;
         this.variablesMap = variablesMap;
         this.toolsEnabledMap = toolsEnabledMap;
+        this.variablesTab = variablesTab;
     }
 
     /**
@@ -77,15 +82,80 @@ public class BurpVariablesHTTPHandler implements HttpHandler{
     }
 
     /**
-     * Handles HTTP responses before they are received by Burp.
-     * Unused; responses are not modified.
+     * Handles HTTP responses after they are received by Burp.
+     * When auto-update variables is enabled, searches responses for regex matches
+     * and updates variable values with the first capture group.
      *
      * @param responseReceived  HTTP response before it is received by Burp.
      * @return  The unmodified HTTP response.
      */
     @Override
     public ResponseReceivedAction handleHttpResponseReceived(HttpResponseReceived responseReceived) {
+        // Check if auto-update variables feature is enabled in settings
+        Boolean variableAutoUpdateEnabled = toolsEnabledMap.get("variableAutoUpdate");
+        if (variableAutoUpdateEnabled != null && variableAutoUpdateEnabled) {
+            // Convert response to string for regex matching (includes headers and body)
+            String responseAsString = responseReceived.toString();
+
+            // Iterate through all variables to check for regex matches
+            for (HashMap.Entry<String, VariableData> entry : variablesMap.entrySet()) {
+                String regex = entry.getValue().regex();
+
+                // Skip variables without a regex pattern defined
+                if (regex == null || regex.isEmpty()) {
+                    continue;
+                }
+
+                // Skip invalid regex patterns or patterns without capture groups
+                if (!isValidRegexWithCaptureGroup(regex)) {
+                    continue;
+                }
+
+                try {
+                    // Compile and execute the regex against the response
+                    Pattern pattern = Pattern.compile(regex);
+                    Matcher matcher = pattern.matcher(responseAsString);
+
+                    // Check if a match was found with at least one capture group
+                    if (matcher.find() && matcher.groupCount() > 0) {
+                        // Extract the first capture group value
+                        String capturedValue = matcher.group(1);
+                        if (capturedValue != null) {
+                            // Update the variable's value in the map while preserving the regex
+                            String variableName = entry.getKey();
+                            variablesMap.put(variableName, new VariableData(capturedValue, regex));
+                            // Notify the UI tab to refresh the table display
+                            variablesTab.updateVariableInTable(variableName, capturedValue);
+                            burpLogging.logToOutput("Auto-updated variable '" + variableName + "' to: " + capturedValue);
+                        }
+                    }
+                } catch (PatternSyntaxException e) {
+                    // Log error for invalid regex (should not occur due to prior validation)
+                    burpLogging.logToError("Invalid regex for variable '" + entry.getKey() + "': " + e.getMessage());
+                }
+            }
+        }
+        // Always return the response unmodified; this handler only extracts data
         return ResponseReceivedAction.continueWith(responseReceived);
+    }
+
+    /**
+     * Checks if a regex pattern is valid and contains at least one capture group.
+     *
+     * @param regex The regex pattern to validate.
+     * @return True if the regex is valid and has at least one capture group, false otherwise.
+     */
+    private boolean isValidRegexWithCaptureGroup(String regex) {
+        try {
+            // Attempt to compile the regex; throws PatternSyntaxException if invalid
+            Pattern pattern = Pattern.compile(regex);
+            // Check if the pattern has at least one capture group using an empty string matcher
+            // groupCount() returns the number of capturing groups, excluding group 0 (the entire match)
+            return pattern.matcher("").groupCount() > 0;
+        } catch (PatternSyntaxException e) {
+            // Invalid regex syntax
+            return false;
+        }
     }
 
     /**
@@ -96,8 +166,7 @@ public class BurpVariablesHTTPHandler implements HttpHandler{
      */
     private boolean containsVariable(String passedRequestAsString){
         // Regex to match variable names enclosed in double parentheses
-        Pattern pattern = Pattern.compile("\\(\\(.+\\)\\)");
-        Matcher matcher = pattern.matcher(passedRequestAsString);
+        Matcher matcher = VARIABLE_PATTERN.matcher(passedRequestAsString);
 
         // Return true if a match is found, otherwise false
         return matcher.find();
@@ -111,13 +180,13 @@ public class BurpVariablesHTTPHandler implements HttpHandler{
      * @return  Modified HTTP request with variables replaced.
      */
     private String replaceVariables(String passedRequestAsString){
-        // Iterate through the storage object
-        for (HashMap.Entry<String, String> entry : variablesMap.entrySet()) {
+        // Iterate through the variables map
+        for (HashMap.Entry<String, VariableData> entry : variablesMap.entrySet()) {
             // Don't replace if the key is empty
             if(!entry.getKey().isEmpty()) {
                 // Replace the variable references in the HTTP request
                 // Pattern.quote is used to escape special characters in the key string
-                passedRequestAsString = passedRequestAsString.replaceAll(Pattern.quote("((" + entry.getKey() + "))"), entry.getValue());
+                passedRequestAsString = passedRequestAsString.replaceAll(Pattern.quote("((" + entry.getKey() + "))"), entry.getValue().value());
             }
         }
         return passedRequestAsString;

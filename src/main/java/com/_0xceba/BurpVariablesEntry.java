@@ -3,6 +3,7 @@ package com._0xceba;
 import burp.api.montoya.BurpExtension;
 import burp.api.montoya.logging.Logging;
 import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.persistence.PersistedList;
 import burp.api.montoya.persistence.PersistedObject;
 
 import java.util.HashMap;
@@ -35,25 +36,48 @@ public class BurpVariablesEntry implements BurpExtension {
             toolsEnabledMap.put(key, burpPersistence.getBoolean(key));
         }
 
-        // Initialize a HashMap for storing variable key:value pairs
-        // populate the HashMap with data from the persistence object
-        HashMap<String, String> variablesMap = new HashMap<>();
+        // Initialize a HashMap for storing runtime variable data (key, [value, regex])
+        HashMap<String, VariableData> variablesMap = new HashMap<>();
+
+        // Populate variablesMap with data from the persistence object
+        for (String key : burpPersistence.stringListKeys()) {
+            // Retrieve each key's persisted string list of [value, regex]
+            PersistedList<String> variableDataList = burpPersistence.getStringList(key);
+            if (variableDataList != null && !variableDataList.isEmpty()) {
+                String value = variableDataList.get(0);
+                // Check if the list has at least 2 elements, get regex value from
+                // index 1 or use empty string as fallback
+                String regex = variableDataList.size() > 1 ? variableDataList.get(1) : "";
+                // Store the runtime variable data
+                variablesMap.put(key, new VariableData(value, regex));
+            }
+        }
+
+        // Migrate the legacy persistence format (stringKey) to the new format (stringKeyList)
+        // TODO: Remove this functionality after 2026-02
         for (String key : burpPersistence.stringKeys()) {
-            variablesMap.put(key, burpPersistence.getString(key));
+            if (!variablesMap.containsKey(key)) {
+                String value = burpPersistence.getString(key);
+                if (value != null) {
+                    variablesMap.put(key, new VariableData(value, ""));
+                }
+            }
         }
 
         // Register a tab labeled "Variables" in the Burp user interface
-        montoyaApi.userInterface().registerSuiteTab("Variables", new BurpVariablesTab(montoyaApi, burpLogging, variablesMap, toolsEnabledMap));
+        BurpVariablesTab variablesTab = new BurpVariablesTab(montoyaApi, burpLogging, variablesMap, toolsEnabledMap);
+        montoyaApi.userInterface().registerSuiteTab("Variables", variablesTab);
 
         // Register an HTTP handler to intercept and modify requests
-        montoyaApi.http().registerHttpHandler(new BurpVariablesHTTPHandler(burpLogging, variablesMap, toolsEnabledMap));
+        montoyaApi.http().registerHttpHandler(new BurpVariablesHTTPHandler(burpLogging, variablesMap, toolsEnabledMap, variablesTab));
 
         // Register a context menu provider to add items to the context menu
         montoyaApi.userInterface().registerContextMenuItemsProvider(new BurpVariablesContextMenuProvider(burpLogging, variablesMap));
 
         // Log initialization output
-        montoyaApi.logging().logToOutput("Burp Variables v" +
-                getClass().getPackage().getImplementationVersion() +
+        String version = getClass().getPackage().getImplementationVersion();
+        burpLogging.logToOutput("Burp Variables v" +
+                (version != null ? version : "0.0.0") +
                 " loaded successfully.");
 
         // Register an unload handler that is called when the extension is unloaded or Burp is exited
@@ -62,17 +86,27 @@ public class BurpVariablesEntry implements BurpExtension {
             for (HashMap.Entry<String, Boolean> entry : toolsEnabledMap.entrySet())
                 burpPersistence.setBoolean(entry.getKey(), entry.getValue());
 
-            // Clear the persistence object
+            // Clear the persisted string lists
+            for (String key : burpPersistence.stringListKeys()) {
+                burpPersistence.deleteStringList(key);
+            }
+
+            // Save the variable data to Burp persistent storage
+            for (HashMap.Entry<String, VariableData> entry : variablesMap.entrySet()) {
+                PersistedList<String> list = PersistedList.persistedStringList();
+                list.add(entry.getValue().value());
+                list.add(entry.getValue().regex());
+                // Save the list using the variable name as the key
+                burpPersistence.setStringList(entry.getKey(), list);
+            }
+
+            // Delete the legacy String persistence format
+            // TODO: Remove this functionality after 2026-02
             for (String key : burpPersistence.stringKeys()) {
                 burpPersistence.deleteString(key);
             }
 
-            // Copy the variables from the storage object to the persistence object
-            for (HashMap.Entry<String, String> entry : variablesMap.entrySet()) {
-                burpPersistence.setString(entry.getKey(), entry.getValue());
-            }
-
-            montoyaApi.logging().logToOutput("Burp Variables unloaded successfully.");
+            burpLogging.logToOutput("Burp Variables unloaded successfully.");
         });
     }
 }

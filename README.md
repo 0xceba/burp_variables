@@ -6,6 +6,8 @@ Burp Variables is a Burp Suite extension designed to add variable storage and re
 * **Tool filtering:** Toggle which Burp tools perform variable replacement. By default, replacement is enabled for Repeater, Intruder, Scanner, and Extensions. Proxy replacement can be enabled only for in-scope requests.                                                                                                                                  
 * **Auto-update variables:** When enabled, variable values can be automatically updated from HTTP responses. Define a regex pattern with a capture group in the "Variable update regex" column and the first capture group match will become the new variable value.                                                                                      
 * **Import/Export:** Import and export variable data as CSV files to copy variables between projects.
+* **Swap variable to value:** Resolve all `((variableName))` references in the request editor to their current values via the right-click context menu. Useful for previewing the fully resolved request without sending it.
+* **Quick set variable:** Select any text in a request or response (in any Burp tool), right-click and choose "Quick set variable" to instantly create or update a variable with the selected text as its value. A confirmation dialog displays the result of the operation.
 
 ### Installation
 You can install this extension in one of two ways:
@@ -23,3 +25,9 @@ You can install this extension in one of two ways:
 3. Send the request and confirm that the variable references were replaced by viewing the request in the Logger tool:
 
    ![Viewing request with replaced references in Logger tool](burp_variables3.png)
+
+### Context Menu
+Right-click in any message editor or viewer to access Burp Variables features:
+* **Insert variable** — Insert a `((variableName))` reference at the caret position or replace the selected text (available in request editors).
+* **Swap variable to value** — Replace all variable references in the request with their resolved values (available in request editors).
+* **Quick set variable** — Create or update a variable from selected text in any request or response viewer/editor across all Burp tools.

@@ -936,4 +936,36 @@ public class BurpVariablesTab extends JPanel {
             }
         });
     }
+
+    /**
+     * Creates a new variable or updates an existing variable's value.
+     * This method is intended to be called from the context menu's "Quick set variable" action.
+     * When updating, the existing regex pattern is preserved.
+     *
+     * @param variableName  The name of the variable.
+     * @param variableValue The value to assign to the variable.
+     * @return A result message indicating the outcome: created, updated, or failed.
+     */
+    public String addOrUpdateVariable(String variableName, String variableValue) {
+        if (variableName == null || variableName.isEmpty()) {
+            return "Variable name cannot be empty.";
+        }
+
+        if (variablesMap.containsKey(variableName)) {
+            // Update existing variable value, preserving the regex pattern
+            String existingRegex = variablesMap.get(variableName).regex();
+            variablesMap.put(variableName, new VariableData(variableValue, existingRegex));
+            updateVariableInTable(variableName, variableValue);
+            burpLogging.logToOutput("Updated variable '" + variableName + "' via quick set.");
+            return "Variable '" + variableName + "' updated successfully.";
+        } else {
+            // Create a new variable with an empty regex
+            if (addVariable(variableName, variableValue, "")) {
+                burpLogging.logToOutput("Created variable '" + variableName + "' via quick set.");
+                return "Variable '" + variableName + "' created successfully.";
+            } else {
+                return "Failed to create variable '" + variableName + "'.";
+            }
+        }
+    }
 }

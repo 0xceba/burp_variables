@@ -72,7 +72,7 @@ public class BurpVariablesEntry implements BurpExtension {
         montoyaApi.http().registerHttpHandler(new BurpVariablesHTTPHandler(burpLogging, variablesMap, toolsEnabledMap, variablesTab));
 
         // Register a context menu provider to add items to the context menu
-        montoyaApi.userInterface().registerContextMenuItemsProvider(new BurpVariablesContextMenuProvider(burpLogging, variablesMap));
+        montoyaApi.userInterface().registerContextMenuItemsProvider(new BurpVariablesContextMenuProvider(burpLogging, variablesMap, variablesTab));
 
         // Log initialization output
         String version = getClass().getPackage().getImplementationVersion();
